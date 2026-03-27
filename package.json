@@ -1,0 +1,10 @@
+{
+  "name": "starccm-docs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^26.1.0"
+  }
+}

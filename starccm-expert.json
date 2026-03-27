@@ -1,0 +1,24 @@
+{
+  "datasets": [
+    {
+      "path": "/root/STARCCP_DOCS/en_STARCCMP_18.04",
+      "version": "18.04",
+      "language": "en"
+    },
+    {
+      "path": "/root/STARCCP_DOCS/zh_STARCCMP_18.04",
+      "version": "18.04",
+      "language": "zh"
+    },
+    {
+      "path": "/root/STARCCP_DOCS/en_STARCCMP_20.06",
+      "version": "20.06",
+      "language": "en"
+    },
+    {
+      "path": "/root/STARCCP_DOCS/zh_STARCCMP_20.06",
+      "version": "20.06",
+      "language": "zh"
+    }
+  ]
+}
