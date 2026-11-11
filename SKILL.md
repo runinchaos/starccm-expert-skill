@@ -29,6 +29,7 @@ Codex 本地脚本在这个目录下：
 
 - 代码内不要再硬编码 STAR 文档根路径
 - 默认从 `starccm-expert.json` 读取 `datasets[]`
+- `starccm-expert.json` 是**机器本地配置，不入 git**：新机器克隆后复制 `starccm-expert.json.example` 为 `starccm-expert.json`，把 `path` 改成本机 STAR 文档挂载点（真实路径永不提交）
 - 每条数据集至少包含：
   - `path`
   - `version`
