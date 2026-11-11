@@ -15,7 +15,7 @@ description: 用于回答 Simcenter STAR-CCM+ 文档问题。当前默认走 gra
 不要把这套语料当成可以任意直接扫描的普通文件集合。不要直接扫 HTML，不要绕开这个 skill。
 注意：这里沿用旧名字 `graph-peek`，但它现在指的是“原生搜索索引 peek”，不是图检索。
 
-Codex 本地脚本在这个目录下：
+本地脚本在这个目录下（本目录是唯一真源；zcode／claude／opencode 均软链至此）：
 
 - `scripts/starccm-cli.mjs`
 - `scripts/search-core.js`
