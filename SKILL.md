@@ -481,6 +481,21 @@ footnoteSources:
 
 这个模板默认不需要原样输出给用户，但你必须先在脑中把这 4 行补齐，再开始写正式答案。
 
+## MathML 公式直转（整页提取到文档）
+
+当任务是把某页提取成文档、且该页含公式时：STAR WebHelp 的公式本体是 **MathML 控件**（页面由 MathJax3 `mml-svg.js` 客户端渲染），`graph-read` 的纯文本会把公式**压平失真**——禁止从压平文本复原公式。
+
+正确做法：先走完 `graph-peek -> graph-read` 选定 `pageId`，再用 `relPath` 定位 HTML，用本 skill 自带的直转器整页转出 Markdown＋MathJax：
+
+```bash
+python3 <skill目录>/scripts/extract_mathml.py <数据集路径>/<folderName>/<relPath>
+```
+
+- `<数据集路径>/<folderName>/<relPath>` 三个值都来自 `graph-read` 的返回字段。
+- 直转器把 `<math>` 元素按文档序转成 `$...$`／`$$...$$`（覆盖 `mfrac/msub/msup/msubsup/mover/mtable/msqrt`，含 `\bar`、`\dot`、多行 array），并保留标题／段落／列表／表格与 STAR 原文式号。
+- 该工具只允许作用于**已经过 graph-peek/graph-read 选定的 pageId**，不是绕开检索自由扫 HTML 的口子。
+- 中英文选版：zh 页若行内公式被译者挪位或整页未翻译，正文取 en 权威版，zh 页进脚注注明（2026-11-11 Berkeley/EHT 两页实测该规则）。
+
 ## 引用纪律
 
 这个 skill 的回答必须默认可审计。
@@ -636,6 +651,91 @@ en|20.06|GUID-CCC -> 3
 - 标题下面直接写脚注定义
 - 不再单独写普通项目符号来源列表
 
+## 飞书文档输出
+
+当用户要求写飞书文档时，引用格式必须降级为飞书兼容格式。
+
+**飞书不支持 Markdown 脚注语法**（`[^n]` 和 `[^n]:`），直接写入会被当纯文本渲染。
+
+### 降级规则
+
+1. **正文引用**：使用 `[n]` 纯文本标注，不用 `[^n]`
+   - 例如：`壳区域基于面网格离散 [1]`
+2. **References 区块**：不写脚注定义，改为飞书表格
+   - 表格列：`编号` | `版本` | `文档标题` | `页面 ID`
+   - 每行对应一条来源
+
+### 引用编号一致性
+
+飞书降级方案下，编号纪律不变：
+
+- 同一来源全文复用同一编号
+- 编号按正文首次出现顺序分配
+- 编号必须连续：`1, 2, 3, ...`
+- 正文引用和 References 表格必须一一对应
+- 不允许正文有 `[4]` 但表格里没有第 4 行
+- 不允许表格有第 5 行但正文没用 `[5]`
+
+### 飞书文档创建流程
+
+1. 先按正常 skill 流程完成检索和精读
+2. 在脑中整理好引用 map（sourceKey -> footnoteNumber）
+3. 写文档正文时使用 `[n]` 标注
+4. 用 `feishu_doc` 的 `create` 创建文档
+5. 用 `feishu_doc` 的 `write` 写入完整内容
+6. 在 References 区域写入引用表格
+
+### 非飞书场景
+
+如果输出目标是聊天回复（非飞书文档），仍使用标准 Markdown 脚注格式：
+
+- 正文：`[^n]`
+- References：`[^n]: language version | Title | pageId=GUID-...`
+
+## 并行检索优化
+
+### 并行 peek
+
+当需要同时查 18.04 和 20.06 时，两轮 peek 应该并行发出，不要串行等待。
+
+实际执行方式：在同一个 tool call 中发出两个 `starccm_doc_graph_peek` 调用，分别指定 `versions: ["18.04"]` 和 `versions: ["20.06"]`，其余参数（query、languages）保持一致。
+
+### 批量 read
+
+多个 pageId 应该一次 `starccm_doc_graph_read` 调用完成，不要逐页调用。
+
+- 单次调用最多传 `5` 个 pageId（保证可读性）
+- 如果需要读超过 5 个 pageId，分批调用
+- 同一版本和语言的 pageId 尽量合并到同一次调用
+
+### 并行 + 批量示例
+
+```
+# 第 1 步：并行 peek（一次 tool call 里两个调用）
+starccm_doc_graph_peek(query=..., versions=["18.04"], languages=["zh","en"], ...)
+starccm_doc_graph_peek(query=..., versions=["20.06"], languages=["zh","en"], ...)
+
+# 第 2 步：批量 read（一次 tool call 里最多 5 个 pageId）
+starccm_doc_graph_read(pageIds=["GUID-A","GUID-B","GUID-C"], versions=["18.04"], languages=["zh","en"], ...)
+```
+
+## Gap-Driven 补位策略
+
+当第 1 轮 peek 结果不够全面时，第 2 轮应针对具体缺口补关键词，而不是机械重搜同义词。
+
+### 补位流程
+
+1. **先判断缺什么**：对比第 1 轮 peekList 和题目要求，明确是缺定义、设置、限制、边界条件、网格、交界面、教程示例中的哪一类
+2. **再针对性补词**：由 agent 根据题目上下文自行规划 2-3 个补位关键词，不使用预定义词表
+3. **不要重搜同义词**：第 2 轮关键词应覆盖第 1 轮未触及的信息维度，而非换一种说法重搜同一个面
+
+### 补位原则
+
+- agent 自行判断补位方向，不依赖硬编码的缺口-关键词映射
+- 补位关键词数量控制在 2-3 个
+- 不要把整个主题重新泛搜一遍
+- 不要在第 2 轮用和第 1 轮完全相同的关键词
+
 ## 禁止事项
 
 下面这些都不允许：
@@ -646,8 +746,14 @@ en|20.06|GUID-CCC -> 3
 - 把整句口语问题原样塞给脚本
 - 只看 peek 不精读就下结论
 - 只给最终来源列表，不给正文逐条 citation
+- 飞书文档中使用 `[^n]` 脚注语法（飞书不支持，必须降级为 `[n]` + 表格）
+- 串行 peek 两个版本（应并行）
+- 逐页 read（应批量，每批最多 5 个 pageId）
+- 第 2 轮 peek 用和第 1 轮完全相同的关键词
 
 ## 速记规则
+
+- 整页提取带公式：用 scripts/extract_mathml.py 直转 MathML，禁止从压平文本复原。
 
 - 每种语言关键词最多 `5` 个。
 - peek 最多 `3` 轮。
@@ -655,3 +761,7 @@ en|20.06|GUID-CCC -> 3
 - 当前对外只认 `graph-peek` 和 `graph-read`。
 - agent 负责柔性理解；脚本负责硬检索。
 - `18.04` 默认走 `peek -> read`，`20.06` 明确指定时也走 `peek -> read`。
+- 双版本 peek 必须并行。
+- 多 pageId read 必须批量（每批 ≤ 5）。
+- 飞书文档输出时引用格式降级为 `[n]` + 表格。
+- gap-driven 补位先判断缺什么，再由 agent 自行规划 2-3 个补位关键词，不使用预定义词表。
